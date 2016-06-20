@@ -243,3 +243,7 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+/Face_Assessment/Clip1
+/Face_Assessment/Clip10
+/Face_Assessment/Clip4
+/Face_Assessment/Clip4
