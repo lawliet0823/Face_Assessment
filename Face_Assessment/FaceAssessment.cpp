@@ -7,6 +7,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/objdetect/objdetect.hpp>
+#include <opencv2/nonfree/features2d.hpp>
 
 #include "Headers/flandmark_detector.h"
 #include "Headers/liblbp.h"
@@ -27,127 +28,142 @@ double* landmarkDetection(Mat image, Rect rect_face);
 Rect getCropImageBound(double center_x, double center_y, int crop_size);
 
 double getSkewness(double *landmarks);
+float caculateSymmetry(Mat image);
 double caculateSymmetry(double *landmarks);
 double caculateSymmetry(double *landmarks, double angle);
 double caculateSymmetry(Mat image, double *landmarks);
 double caculateSymmetry(Mat image, double *landmarks, Rect rect);
-map<string, Mat> caculateSymmetry(map<string, Mat> infoMap, map<string, double*> landMap);
+float caculateSharpness(Mat image);
+map<string, Mat> caculateSymmetry(map<string, Mat> infoMap);
 map<string, Mat> caculateSharpness(map<string, Mat> infoMap);
 map<string, Mat> caculateBrightness(map<string, Mat> infoMap);
 Mat rotateImage(Mat src, double angle);
 double* landmarkRotation(double *landmarks, double angle, double midX, double midY);
 
+float lineLength(float x1, float y1, float x2, float y2) {
+	float length = 0;
+	length = sqrt(pow(abs(x2 - x1), 2) + pow(abs(y2 - y1), 2));
+	return length;
+}
+
+float calcuTriangleArea(float s1, float s2, float s3) {
+	float s = (s1 + s2 + s3) / 2;
+	float area = sqrt(s*(s - s1)*(s - s2)*(s - s3));
+	return area;
+}
+
 int main() {
 
-	ofstream assess_file("Assessment.txt");
-	map<string, int> map_file = readFile("File.txt");
+	/*
+	vector<Rect> faces;
+	Mat face_image = imread("029.jpg");
+	if (face_image.empty()) {
+	cout << "Image read error" << endl;
+	}
+
+	faces = faceDetection(face_image);
+	if (faces.empty()) {
+	cout << "face detection error " << endl;
+	}
+	Mat gray_image;
+	cvtColor(face_image, gray_image, CV_RGB2GRAY);
+	double *landmarks = landmarkDetection(gray_image, faces.at(0));
+	if (landmarks < 0) {
+	cout << "landmark detection error " << endl;
+	}
+	// Crop Face Image
+	face_image = face_image(faces.at(0));
+	// Examine image size
+	if (face_image.rows >= 100 && face_image.cols >= 100) {
+	cout << "IN" << endl;
+	}
+	*/
+
+
+	ofstream assess_file("Clip01/Assessment_Result_Check.txt");
+	map<string, int> map_file = readFile("Clip01/File.txt");
 	map<string, int>::iterator it_map_file = map_file.begin();
 	map<string, Mat> inputMap;
-	map<string, double*> landMap;
+	vector<Rect> faces;
 	//vector<Mat> vm_img;
 	//int previous_label = 4;
 	int count = 1;
+	int count_num = 1;
 	for (; it_map_file != map_file.end(); it_map_file++) {
-		string file_name = it_map_file->first;
-		int label = it_map_file->second;
-
-		//if (label == previous_label) {
-			// Read image
+		string file_name = it_map_file->first;		// read file name
+		int label = it_map_file->second;			// read label
+		cout << file_name << endl;
 		Mat face_image = imread(file_name);
-		if (face_image.empty()) {
-			cout << "Image read error" << file_name << endl;
-			continue;
-		}
 
-		// Examine image size
-		if (face_image.rows > 150 && face_image.cols > 150) {
-			Mat grey_face_image;
-			cvtColor(face_image, grey_face_image, CV_RGB2GRAY);
-
-			// Face Detection
-			vector<Rect> faces = faceDetection(face_image);
+		if (label == count) {
+			if (face_image.empty()) {
+				cout << "Image read error" << file_name << endl;
+				continue;
+			}
+			faces.swap(vector<Rect>());				// clear store faces
+			faces = faceDetection(face_image);
 			if (faces.empty()) {
 				cout << "face detection error " << file_name << endl;
 				continue;
 			}
-
-			// Landmark detection
-			double *landmarks = landmarkDetection(grey_face_image, faces.at(0));
-			if (*landmarks < 0) {
-				cout << "can't find landmarks " << file_name << endl;
+			Mat gray_image;
+			cvtColor(face_image, gray_image, CV_RGB2GRAY);
+			double *landmarks = landmarkDetection(gray_image, faces.at(0));
+			if (landmarks < 0) {
+				cout << "landmark detection error " << file_name << endl;
 				continue;
 			}
-
-			// Image rotation
-			double angle = getSkewness(landmarks);
-			Mat rotation_image = rotateImage(face_image, angle);
-			
-			
-			vector<Mat> channels;
-			Mat img_hist_equalized;
-			cvtColor(rotation_image, img_hist_equalized, CV_BGR2YCrCb); //change the color image from BGR to YCrCb format
-			split(img_hist_equalized, channels); //split the image into channels
-			equalizeHist(channels[0], channels[0]); //equalize histogram on the 1st channel (Y)
-			merge(channels, img_hist_equalized); //merge 3 channels including the modified 1st channel into one image
-			cvtColor(img_hist_equalized, img_hist_equalized, CV_YCrCb2BGR); //change the color image from YCrCb to BGR format (to display image properly)
-			//imshow("", img_hist_equalized);
-			//waitKey(0);
-			
-			//inputMap.insert(make_pair(file_name, face_image));
-			//landMap.insert(make_pair(file_name, landmarks));
-
-			//cvtColor(rotation_image, rotation_image, CV_RGB2GRAY);
-			cout << file_name << endl;
-			//assess_file << count++ << "	" << caculateSymmetry(rotation_image, landmarkRotation(landmarks, -angle, face_image.cols / 2, face_image.rows / 2)) << endl;
-			assess_file << count++ << "	" << caculateSymmetry(img_hist_equalized, landmarks) << endl;
-			/*
-			if (caculateSymmetry(rotation_image, landmarkRotation(landmarks, -angle, rotation_image.cols / 2, rotation_image.rows / 2)) < 120) {
-				//tempMap.insert(make_pair(file_name, face_image));
-				cout << file_name << endl;
-				assess_file << file_name << endl;
+			// Crop Face Image
+			face_image = face_image(faces.at(0));
+			// Examine image size
+			if (face_image.rows >= 100 && face_image.cols >= 100) {
+				inputMap.insert(make_pair(file_name, face_image));
 			}
-			*/
 		}
-		//}
-			/*
 		else {
-			previous_label++;
-			vector<Mat>().swap(vm_img);
+			count++;
+			map<string, Mat> outputMap = caculateBrightness(caculateSharpness(caculateSymmetry(inputMap)));
+			map<string, Mat>::iterator it_output = outputMap.begin();
+			for (; it_output != outputMap.end(); it_output++) {
+				assess_file << it_output->first << "	" << count_num << endl;
+			}
+			count_num++;
+			inputMap.clear();
+			it_map_file--;
 		}
-		*/
 	}
 	assess_file.close();
+
 	/*
 	map<string, Mat> finalMap = caculateSymmetry(inputMap, landMap);
 	map<string, Mat>::iterator it_final = finalMap.begin();
 	for (; it_final != finalMap.end(); it_final++) {
-		assess_file << it_final->first << endl;
+	assess_file << it_final->first << endl;
 	}
 	assess_file.close();
-	*/
 
 	/*
 	ofstream assess_file("Assessment_File.txt");
 	map<string, int> map_file = readFile("Before_Assess_Yeh.txt");
 	map<string, int>::const_iterator it_map_file = map_file.begin();
 	for (; it_map_file != map_file.end(); it_map_file++) {
-		String fileLocation = it_map_file->first;
-		Mat image = imread(fileLocation);
-		vector<Rect> faces = faceDetection(image);
-		if (faces.size() == 0) {
-			cout << "Face Detect Error!!!" << endl;
-		}
-		Mat grey_image;
-		cvtColor(image, grey_image, CV_RGB2GRAY);
-		double *landmarks = landmarkDetection(grey_image, faces.at(0));
-		if (*landmarks < 0) {
-			cout << "Landmark Detection Failed" << endl;
-		}
-		Mat rotation_image = rotateImage(image, getSkewness(landmarks));
-		double value = caculateSymmetry(rotation_image, landmarks);
-		if (value < 140)
-			cout << fileLocation << endl;
-		assess_file << value << endl;
+	String fileLocation = it_map_file->first;
+	Mat image = imread(fileLocation);
+	vector<Rect> faces = faceDetection(image);
+	if (faces.size() == 0) {
+	cout << "Face Detect Error!!!" << endl;
+	}
+	Mat grey_image;
+	cvtColor(image, grey_image, CV_RGB2GRAY);
+	double *landmarks = landmarkDetection(grey_image, faces.at(0));
+	if (*landmarks < 0) {
+	cout << "Landmark Detection Failed" << endl;
+	}
+	Mat rotation_image = rotateImage(image, getSkewness(landmarks));
+	double value = caculateSymmetry(rotation_image, landmarks);
+	if (value < 140)
+	cout << fileLocation << endl;
+	assess_file << value << endl;
 	}
 	assess_file.close();
 	*/
@@ -194,11 +210,12 @@ double* landmarkDetection(Mat image, Rect rect_face) {
 
 	/*
 	for (size_t landmark_element = 0; landmark_element < 15; landmark_element += 2) {
-		cvCircle(img_grayscale, cvPoint(landmarks[landmark_element], landmarks[landmark_element + 1]), 3, CV_RGB(255, 0, 0), -1, 8, 0);
-		cvShowImage("Result", img_grayscale);
-		waitKey(500);
+	cvCircle(img_grayscale, cvPoint(landmarks[landmark_element], landmarks[landmark_element + 1]), 3, CV_RGB(255, 0, 0), -1, 8, 0);
+	cvShowImage("Result", img_grayscale);
+	waitKey(500);
 	}
 	*/
+
 	return landmarks;
 }
 
@@ -207,18 +224,43 @@ Rect getCropImageBound(double center_x, double center_y, int crop_size) {
 	return rect;
 }
 
-
 double getSkewness(double *landmarks) {
 	double mean_x_value = (landmarks[2] + landmarks[4] + landmarks[10] + landmarks[12]) / 4.0;
 	double mean_y_value = (landmarks[3] + landmarks[5] + landmarks[11] + landmarks[13]) / 4.0;
 	double theta = atan(((landmarks[2] * landmarks[3] + landmarks[4] * landmarks[5] + landmarks[10] * landmarks[11] + landmarks[12] * landmarks[13]) - 4 * mean_x_value*mean_y_value)
 		/ (pow(landmarks[2], 2) + pow(landmarks[4], 2) + pow(landmarks[10], 2) + pow(landmarks[12], 2) - 4 * pow(mean_x_value, 2)));
-	return theta * 180 / 3.14;
+	return theta * 180 / 3.1415926;
+}
+
+float caculateSymmetry(Mat image)
+{
+	Mat gray_face_image;
+	if (image.channels() == 3) {
+		cvtColor(image, gray_face_image, CV_RGB2GRAY);
+	}
+	else {
+		gray_face_image = image;
+	}
+	float score = 0;
+	Mat low_pass_src;
+	bilateralFilter(gray_face_image, low_pass_src, 10, 80, 80);
+	imwrite("Output.jpg", low_pass_src);
+	for (size_t row_num = 0; row_num < gray_face_image.rows; row_num++) {
+		for (size_t col_num = 0; col_num < gray_face_image.cols; col_num++) {
+			score += abs(gray_face_image.at<uchar>(row_num, col_num) - low_pass_src.at<uchar>(row_num, col_num));
+			//cout << "" << endl;
+		}
+	}
+	score = score / (gray_face_image.rows*gray_face_image.cols);
+	return  score;
 }
 
 double caculateSymmetry(double *landmarks) {
 	float diff_value = 0;
-
+	double midX = (landmarks[2] + landmarks[4]) / 2;
+	double midY = (landmarks[3] + landmarks[5]) / 2;
+	diff_value = calcuTriangleArea(lineLength(midX, midY, landmarks[8], landmarks[9]), lineLength(midX, midY, landmarks[12], landmarks[13]), lineLength(landmarks[8], landmarks[9], landmarks[12], landmarks[13])) /
+		calcuTriangleArea(lineLength(midX, midY, landmarks[6], landmarks[7]), lineLength(midX, midY, landmarks[10], landmarks[11]), lineLength(landmarks[6], landmarks[7], landmarks[10], landmarks[11]));
 	return diff_value;
 }
 
@@ -308,7 +350,7 @@ double caculateSymmetry(Mat image, double *landmarks, Rect rect) {
 			dataR[1] = h;
 			dataR[2] = s;
 			//dataR[3] = v;
-		//}
+			//}
 		}
 	}
 	/*
@@ -325,14 +367,14 @@ double caculateSymmetry(Mat image, double *landmarks, Rect rect) {
 	Mat signR(histR.rows, 2, CV_32FC1);
 
 	for (size_t i = 0; i < histL.rows; i++) {
-		signL.at<float>(i, 0) = histL.at<float>(i, 0);
-		signL.at<float>(i, 1) = i;
+	signL.at<float>(i, 0) = histL.at<float>(i, 0);
+	signL.at<float>(i, 1) = i;
 	}
 
 	for (size_t i = 0; i < histR.rows; i++) {
-		signR.at<float>(i, 0) = histR.at<float>(i, 0);
-		signR.at<float>(i, 1) = i;
-		//cout << histR.at<float>(i, 0) << endl;
+	signR.at<float>(i, 0) = histR.at<float>(i, 0);
+	signR.at<float>(i, 1) = i;
+	//cout << histR.at<float>(i, 0) << endl;
 	}
 
 	//double value = compareHist(histL, histR, CV_COMP_INTERSECT);
@@ -341,15 +383,28 @@ double caculateSymmetry(Mat image, double *landmarks, Rect rect) {
 	return emd_distance;
 }
 
+float caculateSharpness(Mat image)
+{
+	double score = 0;
+	Mat laplacian;
+	Mat result_m;
+	Mat result_sd;
+	Laplacian(image, laplacian, CV_16S, 3);
+	convertScaleAbs(laplacian, laplacian);
+	meanStdDev(laplacian, result_m, result_sd);
+	score = result_sd.at<double>(0, 0);
+	return score;
+}
+
 // use hog to detect symmetry
 double caculateSymmetry(Mat image, double *landmarks) {
 	//cout << "in" << endl;
 	double symmetryValue = 0;
-	for (size_t landmark_element = 2; landmark_element < 13; landmark_element += 4) {
+	for (size_t landmark_element = 6; landmark_element < 13; landmark_element += 4) {
 		Rect cropRectL = getCropImageBound(static_cast<int>(landmarks[landmark_element]),
-			static_cast<int>(landmarks[landmark_element + 1]), 32);
+			static_cast<int>(landmarks[landmark_element + 1]), 16);
 		Rect cropRectR = getCropImageBound(static_cast<int>(landmarks[landmark_element + 2]),
-			static_cast<int>(landmarks[landmark_element + 3]), 32);
+			static_cast<int>(landmarks[landmark_element + 3]), 16);
 		Mat crop_ImgL = image(cropRectL);
 		Mat crop_ImgR = image(cropRectR);
 		//imshow("image", image);
@@ -357,6 +412,21 @@ double caculateSymmetry(Mat image, double *landmarks) {
 		//imshow("R", crop_ImgR);
 		//waitKey(0);
 
+		int histSize = 256;
+		float range[] = { 0, 255 };
+		const float* histRange = { range };
+		cvtColor(crop_ImgL, crop_ImgL, CV_RGB2GRAY);
+		cvtColor(crop_ImgR, crop_ImgR, CV_RGB2GRAY);
+		//equalizeHist(crop_ImgL, crop_ImgL);
+		//equalizeHist(crop_ImgR, crop_ImgR);
+		Mat lHist;
+		Mat rHist;
+		calcHist(&crop_ImgL, 1, 0, Mat(), lHist, 1, &histSize, &histRange);
+		calcHist(&crop_ImgR, 1, 0, Mat(), rHist, 1, &histSize, &histRange);
+		//normalize(lHist, lHist, 1.0, 0.0, NORM_MINMAX);
+		//normalize(rHist, rHist, 1.0, 0.0, NORM_MINMAX);
+		symmetryValue += compareHist(lHist, rHist, CV_COMP_CHISQR);
+		/*
 		// HOG Descriptor
 		HOGDescriptor hog(Size(32, 32), Size(16, 16), Size(8, 8), Size(4, 4), 9);
 		//HOGDescriptor hogR(Size(32, 32), Size(16, 16), Size(8, 8), Size(8, 8), 9);
@@ -375,10 +445,10 @@ double caculateSymmetry(Mat image, double *landmarks) {
 		hogFeatR.create(dersR.size(), 1, CV_32FC1);
 
 		for (size_t i = 0; i < dersL.size(); i++) {
-			hogFeatL.at<float>(i, 0) = dersL.at(i);
+		hogFeatL.at<float>(i, 0) = dersL.at(i);
 		}
 		for (size_t i = 0; i < dersR.size(); i++) {
-			hogFeatR.at<float>(i, 0) = dersR.at(i);
+		hogFeatR.at<float>(i, 0) = dersR.at(i);
 		}
 
 		int nHistSize = 65536;
@@ -394,31 +464,41 @@ double caculateSymmetry(Mat image, double *landmarks) {
 		//hogFeatR.release();
 		//cout << "finish" << endl;
 		symmetryValue += compareHist(matHistL, matHistR, CV_COMP_CHISQR);
+		*/
 	}
-	symmetryValue /= 7;
+	symmetryValue /= 3;
 	return symmetryValue;
 }
 
-map<string, Mat> caculateSymmetry(map<string, Mat> infoMap, map<string, double*> landMap)
+map<string, Mat> caculateSymmetry(map<string, Mat> infoMap)
 {
 	map<string, Mat> returnMap;
 	map<float, string> mfs_score;
 	map<string, Mat>::iterator it_info = infoMap.begin();
+	float max_score = INT_MIN;
 	for (; it_info != infoMap.end(); it_info++) {
 		float score = 0;
 		string file_name = it_info->first;
 		Mat face_image = it_info->second;
-
-		double angle = getSkewness(landMap.find(file_name)->second);
-		Mat rotation_image = rotateImage(face_image, angle);
-		it_info->second = rotation_image;
-		score = caculateSymmetry(rotation_image, landmarkRotation(landMap.find(file_name)->second, -angle, rotation_image.cols / 2, rotation_image.rows / 2));
+		Mat gray_face_image;
+		cvtColor(face_image, gray_face_image, CV_RGB2GRAY);
+		score = caculateSymmetry(gray_face_image);
+		if (score > max_score) {
+			max_score = score;
+		}
 		mfs_score.insert(make_pair(score, file_name));
 	}
-
-	map<float, string>::reverse_iterator it_mfs = mfs_score.rbegin();
-	for (size_t i = 0; i < 10; i++, it_mfs++) {
-		returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+	if (infoMap.size() >= 20) {
+		map<float, string>::reverse_iterator it_mfs = mfs_score.rbegin();
+		for (size_t i = 0; i < 10; i++, it_mfs++) {
+			returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+		}
+	}
+	else {
+		map<float, string>::reverse_iterator it_mfs = mfs_score.rbegin();
+		for (size_t i = 0; i < infoMap.size()*0.8; i++, it_mfs++) {
+			returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+		}
 	}
 	return returnMap;
 }
@@ -426,144 +506,142 @@ map<string, Mat> caculateSymmetry(map<string, Mat> infoMap, map<string, double*>
 map<string, Mat> caculateSharpness(map<string, Mat> infoMap) {
 	map<string, Mat> returnMap;
 	map<float, string> mfs_score;
-	//float maximum_score = INT_MIN;
-
 	map<string, Mat>::iterator it_info = infoMap.begin();
+	float min_score = INT_MAX;
+
 	for (; it_info != infoMap.end(); it_info++) {
+		double score = 0;
 		string file_name = it_info->first;
 		Mat face_image = it_info->second;
-		Mat grey_image;
-		cvtColor(face_image, grey_image, CV_RGB2GRAY);
-		float score = 0;
-		Mat low_pass_src;
-		//IplImage *temp_image = &IplImage(src);
-		//cvSmooth(temp_image, temp_image, CV_BLUR);
-		//low_pass_src = Mat(temp_image);
-		GaussianBlur(grey_image, low_pass_src, Size(3, 3), 0, 0);
-		//imshow("Origin", src);
-		//imshow("After", low_pass_src);
-		//waitKey(0);
-		for (size_t row_num = 0; row_num < grey_image.rows; row_num++) {
-			for (size_t col_num = 0; col_num < grey_image.cols; col_num++) {
-				score += abs(grey_image.at<uchar>(row_num, col_num) - low_pass_src.at<uchar>(row_num, col_num));
-				//cout << "" << endl;
-			}
+		score = caculateSharpness(face_image);
+		if (score < INT_MAX) {
+			min_score = score;
 		}
-		score = score / (grey_image.rows*grey_image.cols);
-		/*
-		if (score > maximum_score) {
-			maximum_score = score;
-		}
-		*/
 		mfs_score.insert(make_pair(score, file_name));
 	}
-	map<float, string>::reverse_iterator it_mfs = mfs_score.rbegin();
-	for (size_t i = 0; i < 10; i++, it_mfs++) {
-		returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+
+	map<float, string>::iterator it_mfs = mfs_score.begin();
+	for (; it_mfs != mfs_score.end(); it_mfs++) {
+		if (min_score / it_mfs->first > 0.8) {
+			returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+		}
 	}
-	// Regulation depends on situation
-	/*
-	assert(images.size() == vf_img_score.size());
-	for (size_t element_num = 0; element_num < vf_img_score.size(); element_num++) {
-		vf_img_score[element_num] = vf_img_score[element_num] / maximum_score;
-	}
-	*/
 	return returnMap;
 }
 
 map<string, Mat> caculateBrightness(map<string, Mat> infoMap) {
 	map<string, Mat> returnMap;
 	map<float, string> mfs_score;
-	//float maximum_score = INT_MIN;
-
 	map<string, Mat>::iterator it_info = infoMap.begin();
+	float max_score = INT_MIN;
+
 	for (; it_info != infoMap.end(); it_info++) {
+		float score = 0;
 		string file_name = it_info->first;
 		Mat face_image = it_info->second;
-		Mat grey_image;
-		cvtColor(face_image, grey_image, CV_RGB2GRAY);
-		float score = 0;
-		for (size_t row_num = 0; row_num < grey_image.rows; row_num++) {
-			for (size_t col_num = 0; col_num < grey_image.cols; col_num++) {
-				score += grey_image.at<uchar>(row_num, col_num);
+		Mat YCbCr_image;
+		cvtColor(face_image, YCbCr_image, CV_RGB2YCrCb, 0);
+		for (size_t row_num = 0; row_num < YCbCr_image.rows; row_num++) {
+			for (size_t col_num = 0; col_num < YCbCr_image.cols; col_num++) {
+				Vec3f pixel = YCbCr_image.at<Vec3b>(row_num, col_num);
+				score += pixel[0];
 			}
 		}
-		score = score / (grey_image.rows*grey_image.cols);
-		/*
-		if (score > maximum_score) {
-			maximum_score = score;
+		score = score / (YCbCr_image.rows*YCbCr_image.cols);
+		if (score > max_score) {
+			max_score = score;
 		}
-		*/
 		mfs_score.insert(make_pair(score, file_name));
 	}
-	map<float, string>::reverse_iterator it_mfs = mfs_score.rbegin();
+
+	map<float, string>::iterator it_mfs = mfs_score.begin();
 	//assert(images.size() == vf_img_score.size());
-	for (size_t i = 0; i < 10; i++, it_mfs++) {
-		returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+	for (; it_mfs != mfs_score.end(); it_mfs++) {
+		if (it_mfs->first / max_score > 0.9) {
+			returnMap.insert(make_pair(it_mfs->second, infoMap.find(it_mfs->second)->second));
+		}
 	}
 	return returnMap;
 }
 
 Mat rotateImage(Mat src, double angle) {
 	Mat dst;
-	Point2f pt(src.cols / 2., src.rows / 2.);
-	Mat r = getRotationMatrix2D(pt, -8, 1.0);
+	Point2f pt(src.cols / 2, src.rows / 2);
+	Mat r = getRotationMatrix2D(pt, angle, 1.0);
 	warpAffine(src, dst, r, Size(src.cols, src.rows));
 	return dst;
 }
 
 double *landmarkRotation(double *landmarks, double angle, double midX, double midY) {
+	float s = sin(angle*3.1415926 / 180);
+	float c = cos(angle*3.1415926 / 180);
+	double *returnLandmarks = new double[16];
 	for (size_t i = 0; i < 15; i += 2) {
-		//cout << landmarks[i] << "	" << landmarks[i + 1] << endl;
-		double tempX = 0;
-		double tempY = 0;
-		landmarks[i] = landmarks[i] - midX;
-		landmarks[i + 1] = landmarks[i + 1] - midY;
-		tempX = (landmarks[i] * cos(angle*3.1415926 / 180) - landmarks[i + 1] * sin(angle*3.1415926 / 180)) + midX;
-		tempY = (landmarks[i] * sin(angle*3.1415926 / 180) + landmarks[i + 1] * cos(angle*3.1415926 / 180)) + midY;
-		//cout << tempX << "	" << tempY << endl;
-		landmarks[i] = tempX;
-		landmarks[i + 1] = tempY;
+		float x = 0;
+		float y = 0;
+		x = landmarks[i] - midX;
+		y = landmarks[i + 1] - midY;
+		float xnew = x*c - y*s;
+		float ynew = x*s + y*c;
+		x = xnew + midX;
+		y = ynew + midY;
+		returnLandmarks[i] = x;
+		returnLandmarks[i + 1] = y;
+	}
+	return returnLandmarks;
+	/*
+	for (size_t i = 0; i < 15; i += 2) {
+	//cout << landmarks[i] << "	" << landmarks[i + 1] << endl;
+	double tempX = 0;
+	double tempY = 0;
+	landmarks[i] = landmarks[i] - midX;
+	landmarks[i + 1] = landmarks[i + 1] - midY;
+	tempX = (landmarks[i] * cos(angle*3.1415926 / 180) - landmarks[i + 1] * sin(angle*3.1415926 / 180)) + midX;
+	tempY = (landmarks[i] * sin(angle*3.1415926 / 180) + landmarks[i + 1] * cos(angle*3.1415926 / 180)) + midY;
+	//cout << tempX << "	" << tempY << endl;
+	landmarks[i] = tempX;
+	landmarks[i + 1] = tempY;
 	}
 	return landmarks;
+	*/
 }
 
 /*
 vector<Mat_<int>> landmarkDetection_27(Mat &image, vector<Rect> faces) {
 
-	// Face Landmark detection pre-setup
-	vector<BoundingBox> test_bounding_box;
-	vector<Mat_<int>> landmark;
+// Face Landmark detection pre-setup
+vector<BoundingBox> test_bounding_box;
+vector<Mat_<int>> landmark;
 
-	for (size_t i = 0; i < faces.size(); i++) {
-		// Face Detection visualization
-		Point leftUpCorner(faces[i].x, faces[i].y);
-		Point rightDownCorner(faces[i].x + faces[i].width, faces[i].y + faces[i].height);
-		//rectangle(image, leftUpCorner, rightDownCorner, Scalar(255, 0, 255), 4, 8, 0);
+for (size_t i = 0; i < faces.size(); i++) {
+// Face Detection visualization
+Point leftUpCorner(faces[i].x, faces[i].y);
+Point rightDownCorner(faces[i].x + faces[i].width, faces[i].y + faces[i].height);
+//rectangle(image, leftUpCorner, rightDownCorner, Scalar(255, 0, 255), 4, 8, 0);
 
-		// Face Detection Bound
-		BoundingBox temp;
-		temp.start_x = faces[i].x;
-		temp.start_y = faces[i].y;
-		temp.width = faces[i].width;
-		temp.height = faces[i].height;
-		temp.centroid_x = faces[i].x + faces[i].width / 2.0;
-		temp.centroid_y = faces[i].y + faces[i].height / 2.0;
-		test_bounding_box.push_back(temp);
+// Face Detection Bound
+BoundingBox temp;
+temp.start_x = faces[i].x;
+temp.start_y = faces[i].y;
+temp.width = faces[i].width;
+temp.height = faces[i].height;
+temp.centroid_x = faces[i].x + faces[i].width / 2.0;
+temp.centroid_y = faces[i].y + faces[i].height / 2.0;
+test_bounding_box.push_back(temp);
 
-		Mat_<int> current_shape = regressor.Predict(image, test_bounding_box.at(i), 30);
-		landmark.push_back(current_shape);
-		// Face image landmark visualization
+Mat_<int> current_shape = regressor.Predict(image, test_bounding_box.at(i), 30);
+landmark.push_back(current_shape);
+// Face image landmark visualization
 
-		for (int j = 0; j < 27; j++) {
-			//cout << current_shape(j, 0) << "		" << current_shape(j, 1) << endl;
-			circle(image, Point2d(current_shape(j, 0), current_shape(j, 1)), 3, Scalar(255, 0, 0), -1, 8, 0);
-		}
+for (int j = 0; j < 27; j++) {
+//cout << current_shape(j, 0) << "		" << current_shape(j, 1) << endl;
+circle(image, Point2d(current_shape(j, 0), current_shape(j, 1)), 3, Scalar(255, 0, 0), -1, 8, 0);
+}
 
-		imwrite("Result.jpg", image);
-		//imshow("Face", image);
-	}
-	return landmark;
-	//imshow(window_name,image);
+imwrite("Result.jpg", image);
+//imshow("Face", image);
+}
+return landmark;
+//imshow(window_name,image);
 }
 */
